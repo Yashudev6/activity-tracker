@@ -1,0 +1,50 @@
+name: Auto Contribution Graph
+
+on:
+  schedule:
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  contribute:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate Backdated and Daily Commits
+        run: |
+          USER_NAME=$(git log --reverse --format='%an' | head -n 1)
+          USER_EMAIL=$(git log --reverse --format='%ae' | head -n 1)
+          git config user.name "$USER_NAME"
+          git config user.email "$USER_EMAIL"
+
+          if [ ! -f .backfill_done ]; then
+            for i in $(seq 180 -1 1); do
+              COMMIT_DATE=$(date -u -d "$i days ago 12:00:00" +"%Y-%m-%dT%H:%M:%SZ")
+              NUM_COMMITS=$(( (RANDOM % 3) + 1 ))
+              for j in $(seq 1 $NUM_COMMITS); do
+                echo "Contribution on $COMMIT_DATE (#$j)" >> contributions.log
+                git add contributions.log
+                GIT_AUTHOR_DATE="$COMMIT_DATE" GIT_COMMITTER_DATE="$COMMIT_DATE" git commit -m "chore: update activity log ($COMMIT_DATE - $j)"
+              done
+            done
+            touch .backfill_done
+            git add .backfill_done
+            git commit -m "chore: initialize backfill marker"
+          fi
+
+          NOW_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          DAILY_COMMITS=$(( (RANDOM % 3) + 1 ))
+          for k in $(seq 1 $DAILY_COMMITS); do
+            echo "Daily contribution on $NOW_DATE (#$k)" >> contributions.log
+            git add contributions.log
+            git commit -m "chore: daily activity update ($NOW_DATE - $k)"
+          done
+
+          git push origin HEAD
